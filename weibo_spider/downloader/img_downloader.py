@@ -15,6 +15,7 @@ class ImgDownloader(Downloader):
         file_dir = self.file_dir + os.sep + self.describe
         if not os.path.isdir(file_dir):
             os.makedirs(file_dir)
+        media_key = self.key or 'original_pictures'
         if ',' in urls:
             url_list = urls.split(',')
             for i, url in enumerate(url_list):
@@ -25,7 +26,12 @@ class ImgDownloader(Downloader):
                     file_suffix = url[index:]
                 file_name = file_prefix + '_' + str(i + 1) + file_suffix
                 file_path = file_dir + os.sep + file_name
-                self.download_one_file(url, file_path, w.id)
+                ok = self.download_one_file(url, file_path, w.id)
+                if ok:
+                    w.media.setdefault(media_key, []).append({
+                        'url': url,
+                        'path': file_path
+                    })
         else:
             index = urls.rfind('.')
             if len(urls) - index > 5:
@@ -34,4 +40,9 @@ class ImgDownloader(Downloader):
                 file_suffix = urls[index:]
             file_name = file_prefix + file_suffix
             file_path = file_dir + os.sep + file_name
-            self.download_one_file(urls, file_path, w.id)
+            ok = self.download_one_file(urls, file_path, w.id)
+            if ok:
+                w.media.setdefault(media_key, []).append({
+                    'url': urls,
+                    'path': file_path
+                })

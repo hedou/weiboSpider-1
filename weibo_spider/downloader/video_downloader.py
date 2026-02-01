@@ -15,4 +15,9 @@ class VideoDownloader(Downloader):
         file_suffix = '.mp4'
         file_name = file_prefix + file_suffix
         file_path = self.file_dir + os.sep + file_name
-        self.download_one_file(urls, file_path, w.id)
+        ok = self.download_one_file(urls, file_path, w.id)
+        if ok:
+            w.media.setdefault('video', []).append({
+                'url': urls,
+                'path': file_path
+            })
