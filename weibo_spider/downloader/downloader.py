@@ -41,12 +41,14 @@ class Downloader(ABC):
                                             self.file_download_timeout[2]))
                 with open(file_path, 'wb') as f:
                     f.write(downloaded.content)
+            return os.path.isfile(file_path)
         except Exception as e:
             error_file = self.file_dir + os.sep + 'not_downloaded.txt'
             with open(error_file, 'ab') as f:
                 url = weibo_id + ':' + file_path + ':' + url + '\n'
                 f.write(url.encode(sys.stdout.encoding))
             logger.exception(e)
+            return False
 
     def download_files(self, weibos):
         """下载文件(图片/视频)"""

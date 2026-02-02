@@ -10,6 +10,14 @@ class Weibo:
         self.retweet_pictures = None
         self.original = None
         self.video_url = ''
+        # Structured media info for better URL <-> local mapping
+        self.original_pictures_list = []
+        self.retweet_pictures_list = []
+        self.media = {
+            'original_pictures': [],
+            'retweet_pictures': [],
+            'video': []
+        }
 
         self.publish_place = ''
         self.publish_time = ''

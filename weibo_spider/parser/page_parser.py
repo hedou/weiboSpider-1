@@ -322,9 +322,20 @@ class PageParser(Parser):
                 picture_urls = self.get_picture_urls(info, is_original)
                 weibo.original_pictures = picture_urls[
                     'original_pictures']  # 原创图片url
+                if weibo.original_pictures != u'无':
+                    weibo.original_pictures_list = [
+                        u.strip() for u in weibo.original_pictures.split(',')
+                        if u.strip()
+                    ]
                 if not self.filter:
                     weibo.retweet_pictures = picture_urls[
                         'retweet_pictures']  # 转发图片url
+                    if weibo.retweet_pictures != u'无':
+                        weibo.retweet_pictures_list = [
+                            u.strip()
+                            for u in weibo.retweet_pictures.split(',')
+                            if u.strip()
+                        ]
                 weibo.video_url = self.get_video_url(info)  # 微博视频url
                 weibo.publish_place = self.get_publish_place(info)  # 微博发布位置
                 weibo.publish_time = self.get_publish_time(info)  # 微博发布时间
