@@ -2,6 +2,8 @@
 import logging
 import os
 import sys
+import time
+import random
 from abc import ABC, abstractmethod
 
 import requests
@@ -33,6 +35,8 @@ class Downloader(ABC):
         """下载单个文件(图片/视频)"""
         try:
             if not os.path.isfile(file_path):
+                # 随机延时，模拟人工操作
+                time.sleep(random.uniform(0.5, 1.5))
                 s = requests.Session()
                 s.mount(url,
                         HTTPAdapter(max_retries=self.file_download_timeout[0]))
