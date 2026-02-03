@@ -8,6 +8,8 @@ import os
 import random
 import shutil
 import sys
+import asyncio
+import aiohttp
 from datetime import date, datetime, timedelta
 from time import sleep
 
@@ -17,6 +19,7 @@ from tqdm import tqdm
 from . import config_util, datetime_util
 from .downloader import AvatarPictureDownloader
 from .parser import AlbumParser, IndexParser, PageParser, PhotoParser
+from .parser.util import handle_html_async
 from .user import User
 
 FLAGS = flags.FLAGS
@@ -97,20 +100,18 @@ class Spider:
                         'user_uri': x['id'],
                         'since_date': x.get('since_date', self.since_date),
                         'end_date': x.get('end_date', self.end_date),
-                    }, [
-                        user_id for user_id in user_id_list
-                        if isinstance(user_id, dict)
-                    ])) + list(
-                        map(
-                            lambda x: {
-                                'user_uri': x,
-                                'since_date': self.since_date,
-                                'end_date': self.end_date
-                            },
-                            set([
-                                user_id for user_id in user_id_list
-                                if not isinstance(user_id, dict)
-                            ])))
+                    }, [user_id for user_id in user_id_list
+                        if isinstance(user_id, dict)])) + list(
+                    map(
+                        lambda x: {
+                            'user_uri': x,
+                            'since_date': self.since_date,
+                            'end_date': self.end_date
+                        },
+                        set([
+                            user_id for user_id in user_id_list
+                            if not isinstance(user_id, dict)
+                        ])))
             if FLAGS.u:
                 config_util.add_user_uri_list(self.user_config_file_path,
                                               user_id_list)
@@ -125,6 +126,7 @@ class Spider:
         self.user = User()  # 存储爬取到的用户信息
         self.got_num = 0  # 存储爬取到的微博数
         self.weibo_id_list = []  # 存储爬取到的所有微博id
+        self.session = None # aiohttp session
 
     def write_weibo(self, weibos):
         """将爬取到的信息写入文件或数据库"""
@@ -138,13 +140,16 @@ class Spider:
         for writer in self.writers:
             writer.write_user(user)
 
-    def get_user_info(self, user_uri):
+    async def get_user_info(self, user_uri):
         """获取用户信息"""
-        self.user = IndexParser(self.cookie, user_uri).get_user()
+        url = 'https://weibo.cn/%s/profile' % (user_uri)
+        selector = await handle_html_async(self.cookie, url, self.session)
+        self.user = await IndexParser(self.cookie, user_uri, selector=selector).get_user_async(self.session)
         self.page_count += 1
 
     def download_user_avatar(self, user_uri):
         """下载用户头像"""
+        # Note: This remains synchronous for now as it's a minor part of the flow
         avatar_album_url = PhotoParser(self.cookie,
                                        user_uri).extract_avatar_album_url()
         pic_urls = AlbumParser(self.cookie,
@@ -153,16 +158,19 @@ class Spider:
             self._get_filepath('img'),
             self.file_download_timeout).handle_download(pic_urls)
 
-    def get_weibo_info(self):
+    async def get_weibo_info(self):
         """获取微博信息"""
         try:
             since_date = datetime_util.str_to_time(
                 self.user_config['since_date'])
             now = datetime.now()
             if since_date <= now:
-                page_num = IndexParser(
-                    self.cookie,
-                    self.user_config['user_uri']).get_page_num()  # 获取微博总页数
+                # Async fetch page num
+                user_uri = self.user_config['user_uri']
+                url = 'https://weibo.cn/%s/profile' % (user_uri)
+                selector = await handle_html_async(self.cookie, url, self.session)
+                page_num = IndexParser(self.cookie, user_uri, selector=selector).get_page_num()
+                
                 self.page_count += 1
                 if self.page_count > 2 and (self.page_count +
                                             page_num) > self.global_wait[0][0]:
@@ -171,16 +179,30 @@ class Spider:
                         min(1, self.page_count / self.global_wait[0][0]))
                     logger.info(u'即将进入全局等待时间，%d秒后程序继续执行' % wait_seconds)
                     for i in tqdm(range(wait_seconds)):
-                        sleep(1)
+                        await asyncio.sleep(1)
                     self.page_count = 0
                     self.global_wait.append(self.global_wait.pop(0))
                 page1 = 0
                 random_pages = random.randint(*self.random_wait_pages)
                 for page in tqdm(range(1, page_num + 1), desc='Progress'):
-                    weibos, self.weibo_id_list, to_continue = PageParser(
+                    # Get URL from parser without fetching
+                    parser_temp = PageParser(
                         self.cookie,
-                        self.user_config, page, self.filter).get_one_page(
-                            self.weibo_id_list)  # 获取第page页的全部微博
+                        self.user_config, page, self.filter, defer_fetch=True)
+                    
+                    # Async fetch with retry
+                    selector = None
+                    for _ in range(3):
+                        selector = await handle_html_async(self.cookie, parser_temp.url, self.session)
+                        if selector is not None:
+                             info = selector.xpath("//div[@class='c']")
+                             if info and len(info) > 0:
+                                 break
+                    
+                    parser = PageParser(self.cookie, self.user_config, page, self.filter, selector=selector)
+                    
+                    weibos, self.weibo_id_list, to_continue = parser.get_one_page(self.weibo_id_list)
+                    
                     logger.info(
                         u'%s已获取%s(%s)的第%d页微博%s',
                         '-' * 30,
@@ -195,11 +217,8 @@ class Spider:
                     if not to_continue:
                         break
 
-                    # 通过加入随机等待避免被限制。爬虫速度过快容易被系统限制(一段时间后限
-                    # 制会自动解除)，加入随机等待模拟人的操作，可降低被系统限制的风险。默
-                    # 认是每爬取1到5页随机等待6到10秒，如果仍然被限，可适当增加sleep时间
                     if (page - page1) % random_pages == 0 and page < page_num:
-                        sleep(random.randint(*self.random_wait_seconds))
+                        await asyncio.sleep(random.randint(*self.random_wait_seconds))
                         page1 = page
                         random_pages = random.randint(*self.random_wait_pages)
 
@@ -207,11 +226,10 @@ class Spider:
                         logger.info(u'即将进入全局等待时间，%d秒后程序继续执行' %
                                     self.global_wait[0][1])
                         for i in tqdm(range(self.global_wait[0][1])):
-                            sleep(1)
+                            await asyncio.sleep(1)
                         self.page_count = 0
                         self.global_wait.append(self.global_wait.pop(0))
 
-                # 更新用户user_id_list.txt中的since_date
                 if self.user_config_file_path or FLAGS.u:
                     config_util.update_user_config_file(
                         self.user_config_file_path,
@@ -292,8 +310,9 @@ class Spider:
 
         self.downloaders = []
         if self.pic_download == 1:
-            from .downloader import (OriginPictureDownloader,
-                                     RetweetPictureDownloader)
+            from .downloader import (
+                OriginPictureDownloader,
+                RetweetPictureDownloader)
 
             self.downloaders.append(
                 OriginPictureDownloader(self._get_filepath('img'),
@@ -309,10 +328,10 @@ class Spider:
                 VideoDownloader(self._get_filepath('video'),
                                 self.file_download_timeout))
 
-    def get_one_user(self, user_config):
+    async def get_one_user(self, user_config):
         """获取一个用户的微博"""
         try:
-            self.get_user_info(user_config['user_uri'])
+            await self.get_user_info(user_config['user_uri'])
             logger.info(self.user)
             logger.info('*' * 100)
 
@@ -324,7 +343,7 @@ class Spider:
             if self.pic_download:
                 self.download_user_avatar(user_config['user_uri'])
 
-            for weibos in self.get_weibo_info():
+            async for weibos in self.get_weibo_info():
                 self.write_weibo(weibos)
                 self.got_num += len(weibos)
             if not self.filter:
@@ -336,23 +355,26 @@ class Spider:
         except Exception as e:
             logger.exception(e)
 
-    def start(self):
+    async def start(self):
         """运行爬虫"""
         try:
             if not self.user_config_list:
                 logger.info(
                     u'没有配置有效的user_id，请通过config.json或user_id_list.txt配置user_id')
                 return
-            user_count = 0
-            user_count1 = random.randint(*self.random_wait_pages)
-            random_users = random.randint(*self.random_wait_pages)
-            for user_config in self.user_config_list:
-                if (user_count - user_count1) % random_users == 0:
-                    sleep(random.randint(*self.random_wait_seconds))
-                    user_count1 = user_count
-                    random_users = random.randint(*self.random_wait_pages)
-                user_count += 1
-                self.get_one_user(user_config)
+            
+            async with aiohttp.ClientSession() as session:
+                self.session = session
+                user_count = 0
+                user_count1 = random.randint(*self.random_wait_pages)
+                random_users = random.randint(*self.random_wait_pages)
+                for user_config in self.user_config_list:
+                    if (user_count - user_count1) % random_users == 0:
+                        await asyncio.sleep(random.randint(*self.random_wait_seconds))
+                        user_count1 = user_count
+                        random_users = random.randint(*self.random_wait_pages)
+                    user_count += 1
+                    await self.get_one_user(user_config)
         except Exception as e:
             logger.exception(e)
 
@@ -368,7 +390,7 @@ def _get_config():
         shutil.copy(src, config_path)
         logger.info(u'请先配置当前目录(%s)下的config.json文件，'
                     u'如果想了解config.json参数的具体意义及配置方法，请访问\n'
-                    u'https://github.com/dataabc/weiboSpider#2程序设置' %
+                    u'https://github.com/dataabc/weiboSpider#2程序设置' % 
                     os.getcwd())
         sys.exit()
     try:
@@ -384,16 +406,17 @@ def _get_config():
                      u'https://github.com/dataabc/weiboSpider#2程序设置')
         sys.exit()
 
-
-def main(_):
+async def async_main(_):
     try:
         config = _get_config()
         config_util.validate_config(config)
         wb = Spider(config)
-        wb.start()  # 爬取微博信息
+        await wb.start()  # 爬取微博信息
     except Exception as e:
         logger.exception(e)
 
+def main(_):
+    asyncio.run(async_main(_))
 
 if __name__ == '__main__':
     app.run(main)
