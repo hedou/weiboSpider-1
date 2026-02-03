@@ -22,7 +22,7 @@ class PostWriter(Writer):
 
     def _update_json_data(self, data, weibo_info):
         """将获取到的微博数据转换为json输出模式一致"""
-        data['user'] = self.user.__dict__
+        data['user'] = self.user.to_dict()
         if data.get('weibo'):
             data['weibo'] += weibo_info
         else:
@@ -51,7 +51,7 @@ class PostWriter(Writer):
     def write_weibo(self, weibos):
         """将爬到的信息POST到API"""
         data = {}
-        data = self._update_json_data(data, [w.__dict__ for w in weibos])
+        data = self._update_json_data(data, [w.to_dict() for w in weibos])
         if data:
             self.send_post_request_with_token(self.api_url, data, self.api_token, 3, 2)
             logger.info(u'%d条微博通过POST发送到 %s', len(weibos), self.api_url)

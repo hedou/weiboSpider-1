@@ -26,7 +26,7 @@ class TxtWriter(Writer):
     def write_user(self, user):
         self.user = user
         user_info = '\n'.join(
-            [v + '：' + str(self.user.__dict__[k]) for k, v in self.user_desc])
+            [v + '：' + str(getattr(self.user, k)) for k, v in self.user_desc])
 
         with open(self.file_path, 'ab') as f:
             f.write((self.user_header + '：\n' + user_info + '\n\n').encode(
@@ -45,8 +45,8 @@ class TxtWriter(Writer):
         try:
             temp_result = []
             for w in weibo:
-                temp_result.append(w.__dict__['content'] + '\n' + '\n'.join(
-                    [v + '：' + str(w.__dict__[k])
+                temp_result.append(getattr(w, 'content') + '\n' + '\n'.join(
+                    [v + '：' + str(getattr(w, k))
                      for k, v in self.weibo_desc]))
             result = '\n\n'.join(temp_result) + '\n\n'
 

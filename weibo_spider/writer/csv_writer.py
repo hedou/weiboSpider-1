@@ -35,7 +35,7 @@ class CsvWriter(Writer):
     def write_weibo(self, weibos):
         """将爬取的信息写入csv文件"""
         try:
-            result_data = [[w.__dict__[kv[1]] for kv in self.result_headers]
+            result_data = [[getattr(w, kv[1]) for kv in self.result_headers]
                            for w in weibos]
             with open(self.file_path, 'a', encoding='utf-8-sig',
                       newline='') as f:

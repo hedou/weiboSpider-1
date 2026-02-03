@@ -50,13 +50,13 @@ class MongoWriter(Writer):
         weibo_list = []
         for w in weibos:
             w.user_id = self.user.id
-            weibo_list.append(w.__dict__)
+            weibo_list.append(w.to_dict())
         self._info_to_mongodb('weibo', weibo_list)
         logger.info(u'%d条微博写入MongoDB数据库完毕', len(weibos))
 
     def write_user(self, user):
         """将爬取的用户信息写入MongoDB数据库"""
         self.user = user
-        user_list = [user.__dict__]
+        user_list = [user.to_dict()]
         self._info_to_mongodb('user', user_list)
         logger.info(u'%s信息写入MongoDB数据库完毕', user.nickname)

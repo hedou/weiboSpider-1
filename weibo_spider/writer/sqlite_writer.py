@@ -77,7 +77,7 @@ class SqliteWriter(Writer):
         info_list = copy.deepcopy(weibos)
         for weibo in info_list:
             weibo.user_id = self.user.id
-            weibo_list.append(weibo.__dict__)
+            weibo_list.append(weibo.to_dict())
         self._sqlite_insert('weibo', weibo_list)
         logger.info(u'%d条微博写入sqlite数据库完毕', len(weibos))
 
@@ -104,5 +104,5 @@ class SqliteWriter(Writer):
                 PRIMARY KEY (id)
                 )"""
         self._sqlite_create_table(create_table)
-        self._sqlite_insert('user', [user.__dict__])
+        self._sqlite_insert('user', [user.to_dict()])
         logger.info(u'%s信息写入sqlite数据库完毕', user.nickname)

@@ -29,13 +29,13 @@ class KafkaWriter(Writer):
         for w in weibo:
             w.user_id = self.user.id
             for topic in self.weibo_topics:
-                self.producer.send(topic, value=w.__dict__)
+                self.producer.send(topic, value=w.to_dict())
 
     def write_user(self, user):
         self.user = user
 
         for topic in self.user_topics:
-            self.producer.send(topic, value=user.__dict__)
+            self.producer.send(topic, value=user.to_dict())
 
     def __del__(self):
         self.producer.close()
