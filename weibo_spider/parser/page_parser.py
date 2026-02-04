@@ -18,7 +18,7 @@ logger = logging.getLogger('spider.page_parser')
 class PageParser(Parser):
     empty_count = 0
 
-    def __init__(self, cookie, user_config, page, filter):
+    def __init__(self, cookie, user_config, page, filter, selector=None, defer_fetch=False):
         self.cookie = cookie
         if hasattr(PageParser,
                    'user_uri') and self.user_uri != user_config['user_uri']:
@@ -39,24 +39,30 @@ class PageParser(Parser):
             endtime = ''.join(end_date)
             self.url = 'https://weibo.cn/%s/profile?starttime=%s&endtime=%s&advancedfilter=1&page=%d' % (
                 self.user_uri, starttime, endtime, page)
-        self.selector = ''
+        self.selector = selector
         self.to_continue = True
         is_exist = ''
-        for i in range(3):
-            self.selector = handle_html(self.cookie, self.url)
-            if self.selector:
-                info = self.selector.xpath("//div[@class='c']")
-                if info is None or len(info) == 0:
-                    continue
+        if self.selector:
+            info = self.selector.xpath("//div[@class='c']")
+            if info and len(info) > 0:
                 is_exist = info[0].xpath("div/span[@class='ctt']")
-            if is_exist:
+        elif not defer_fetch:
+            for i in range(3):
+                self.selector = handle_html(self.cookie, self.url)
+                if self.selector:
+                    info = self.selector.xpath("//div[@class='c']")
+                    if info is None or len(info) == 0:
+                        continue
+                    is_exist = info[0].xpath("div/span[@class='ctt']")
+                if is_exist:
+                    PageParser.empty_count = 0
+                    break
+        if not defer_fetch:
+            if not is_exist:
+                PageParser.empty_count += 1
+            if PageParser.empty_count > 2:
+                self.to_continue = False
                 PageParser.empty_count = 0
-                break
-        if not is_exist:
-            PageParser.empty_count += 1
-        if PageParser.empty_count > 2:
-            self.to_continue = False
-            PageParser.empty_count = 0
         self.filter = filter
 
     def get_one_page(self, weibo_id_list):

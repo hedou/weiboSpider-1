@@ -106,7 +106,7 @@ class MySqlWriter(Writer):
             info_list = copy.deepcopy(weibos)
             for weibo in info_list:
                 weibo.user_id = self.user.id
-                weibo_list.append(weibo.__dict__)
+                weibo_list.append(weibo.to_dict())
             self._mysql_insert('weibo', weibo_list)
             logger.info(u'%d条微博写入MySQL数据库完毕', len(weibos))
         except Exception as e:
@@ -136,7 +136,7 @@ class MySqlWriter(Writer):
                     PRIMARY KEY (id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
             self._mysql_create_table(create_table)
-            self._mysql_insert('user', [user.__dict__])
+            self._mysql_insert('user', [user.to_dict()])
             logger.info(u'%s信息写入MySQL数据库完毕', user.nickname)
         except Exception as e:
             logger.exception(e)

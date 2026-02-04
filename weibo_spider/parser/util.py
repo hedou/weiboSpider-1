@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 
+import aiohttp
 import requests
 from lxml import etree
 
@@ -15,6 +16,35 @@ logger = logging.getLogger('spider.util')
 
 def hash_url(url):
     return hashlib.sha224(url.encode('utf8')).hexdigest()
+
+
+async def handle_html_async(cookie, url, session):
+    """异步处理html"""
+    try:
+        user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36'
+        headers = {'User-Agent': user_agent, 'Cookie': cookie}
+        async with session.get(url, headers=headers) as resp:
+            content = await resp.read()
+
+        if GENERATE_TEST_DATA:
+            import io
+            import os
+
+            resp_file = os.path.join(TEST_DATA_DIR, '%s.html' % hash_url(url))
+            with io.open(resp_file, 'wb') as f:
+                f.write(content)
+
+            with io.open(os.path.join(TEST_DATA_DIR, URL_MAP_FILE), 'r+') as f:
+                url_map = json.loads(f.read())
+                url_map[url] = resp_file
+                f.seek(0)
+                f.write(json.dumps(url_map, indent=4, ensure_ascii=False))
+                f.truncate()
+
+        selector = etree.HTML(content)
+        return selector
+    except Exception as e:
+        logger.exception(e)
 
 
 def handle_html(cookie, url):

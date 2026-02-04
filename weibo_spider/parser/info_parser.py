@@ -9,10 +9,10 @@ logger = logging.getLogger('spider.info_parser')
 
 
 class InfoParser(Parser):
-    def __init__(self, cookie, user_id):
+    def __init__(self, cookie, user_id, selector=None):
         self.cookie = cookie
         self.url = 'https://weibo.cn/%s/info' % (user_id)
-        self.selector = handle_html(self.cookie, self.url)
+        self.selector = selector if selector is not None else handle_html(self.cookie, self.url)
 
     def extract_user_info(self):
         """提取用户信息"""

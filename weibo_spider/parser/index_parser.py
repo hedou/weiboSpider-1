@@ -2,17 +2,17 @@ import logging
 
 from .info_parser import InfoParser
 from .parser import Parser
-from .util import handle_html, string_to_int
+from .util import handle_html, handle_html_async, string_to_int
 
 logger = logging.getLogger('spider.index_parser')
 
 
 class IndexParser(Parser):
-    def __init__(self, cookie, user_uri):
+    def __init__(self, cookie, user_uri, selector=None):
         self.cookie = cookie
         self.user_uri = user_uri
         self.url = 'https://weibo.cn/%s/profile' % (user_uri)
-        self.selector = handle_html(self.cookie, self.url)
+        self.selector = selector if selector is not None else handle_html(self.cookie, self.url)
 
     def _get_user_id(self):
         """获取用户id，使用者输入的user_id不一定是正确的，可能是个性域名等，需要获取真正的user_id"""
@@ -33,6 +33,27 @@ class IndexParser(Parser):
             user_id = self._get_user_id()
             self.user = InfoParser(self.cookie,
                                    user_id).extract_user_info()  # 获取用户信息
+            self.user.id = user_id
+
+            user_info = self.selector.xpath("//div[@class='tip2']/*/text()")
+            self.user.weibo_num = string_to_int(user_info[0][3:-1])
+            self.user.following = string_to_int(user_info[1][3:-1])
+            self.user.followers = string_to_int(user_info[2][3:-1])
+            return self.user
+        except Exception as e:
+            logger.exception(e)
+
+    async def get_user_async(self, session):
+        """获取用户信息、微博数、关注数、粉丝数"""
+        try:
+            user_id = self._get_user_id()
+            
+            from .util import handle_html_async # Local import if needed or top level
+            info_url = 'https://weibo.cn/%s/info' % (user_id)
+            info_selector = await handle_html_async(self.cookie, info_url, session)
+            
+            self.user = InfoParser(self.cookie,
+                                   user_id, selector=info_selector).extract_user_info()  # 获取用户信息
             self.user.id = user_id
 
             user_info = self.selector.xpath("//div[@class='tip2']/*/text()")
