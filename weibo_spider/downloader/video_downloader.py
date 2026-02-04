@@ -9,13 +9,13 @@ class VideoDownloader(Downloader):
         self.describe = u'视频'
         self.key = 'video_url'
 
-    def handle_download(self, urls, w):
+    async def handle_download(self, urls, w, session):
         """处理下载相关操作"""
         file_prefix = w.publish_time[:10].replace('-', '') + '_' + w.id
         file_suffix = '.mp4'
         file_name = file_prefix + file_suffix
         file_path = self.file_dir + os.sep + file_name
-        ok = self.download_one_file(urls, file_path, w.id)
+        ok = await self.download_one_file(urls, file_path, w.id, session)
         if ok:
             w.media.setdefault('video', []).append({
                 'url': urls,

@@ -128,10 +128,10 @@ class Spider:
         self.weibo_id_list = []  # 存储爬取到的所有微博id
         self.session = None # aiohttp session
 
-    def write_weibo(self, weibos):
+    async def write_weibo(self, weibos):
         """将爬取到的信息写入文件或数据库"""
         for downloader in self.downloaders:
-            downloader.download_files(weibos)
+            await downloader.download_files(weibos, self.session)
         for writer in self.writers:
             writer.write_weibo(weibos)
 
@@ -147,16 +147,16 @@ class Spider:
         self.user = await IndexParser(self.cookie, user_uri, selector=selector).get_user_async(self.session)
         self.page_count += 1
 
-    def download_user_avatar(self, user_uri):
+    async def download_user_avatar(self, user_uri):
         """下载用户头像"""
         # Note: This remains synchronous for now as it's a minor part of the flow
         avatar_album_url = PhotoParser(self.cookie,
                                        user_uri).extract_avatar_album_url()
         pic_urls = AlbumParser(self.cookie,
                                avatar_album_url).extract_pic_urls()
-        AvatarPictureDownloader(
+        await AvatarPictureDownloader(
             self._get_filepath('img'),
-            self.file_download_timeout).handle_download(pic_urls)
+            self.file_download_timeout).handle_download(pic_urls, self.session)
 
     async def get_weibo_info(self):
         """获取微博信息"""
@@ -341,10 +341,10 @@ class Spider:
 
             # 下载用户头像相册中的图片。
             if self.pic_download:
-                self.download_user_avatar(user_config['user_uri'])
+                await self.download_user_avatar(user_config['user_uri'])
 
             async for weibos in self.get_weibo_info():
-                self.write_weibo(weibos)
+                await self.write_weibo(weibos)
                 self.got_num += len(weibos)
             if not self.filter:
                 logger.info(u'共爬取' + str(self.got_num) + u'条微博')

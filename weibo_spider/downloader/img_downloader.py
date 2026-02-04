@@ -9,7 +9,7 @@ class ImgDownloader(Downloader):
         self.describe = u'图片'
         self.key = ''
 
-    def handle_download(self, urls, w):
+    async def handle_download(self, urls, w, session):
         """处理下载相关操作"""
         file_prefix = w.publish_time[:10].replace('-', '') + '_' + w.id
         file_dir = self.file_dir + os.sep + self.describe
@@ -26,7 +26,7 @@ class ImgDownloader(Downloader):
                     file_suffix = url[index:]
                 file_name = file_prefix + '_' + str(i + 1) + file_suffix
                 file_path = file_dir + os.sep + file_name
-                ok = self.download_one_file(url, file_path, w.id)
+                ok = await self.download_one_file(url, file_path, w.id, session)
                 if ok:
                     w.media.setdefault(media_key, []).append({
                         'url': url,
@@ -40,7 +40,7 @@ class ImgDownloader(Downloader):
                 file_suffix = urls[index:]
             file_name = file_prefix + file_suffix
             file_path = file_dir + os.sep + file_name
-            ok = self.download_one_file(urls, file_path, w.id)
+            ok = await self.download_one_file(urls, file_path, w.id, session)
             if ok:
                 w.media.setdefault(media_key, []).append({
                     'url': urls,
